@@ -1,5 +1,12 @@
 /.env.local
 /.env.local.php
+garmin-bridge/config/GarminConnectConfig.json
+garmin-bridge/config/garmin_token.json
+garmin-bridge/config/polyline_cache/
+garmin-bridge/.venv/
+storage/database/dreeve.db
+build/
+watch/
 /.env.*.local
 /config/secrets/prod/prod.decrypt.private.php
 /public/bundles/

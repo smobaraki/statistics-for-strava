@@ -2,7 +2,6 @@
 .github
 .idea
 build
-config/app
 cron
 docs
 tests

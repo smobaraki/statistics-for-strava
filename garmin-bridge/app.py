@@ -104,8 +104,17 @@ _display_name: Optional[str] = None
 
 
 def _load_config() -> dict:
-    with open(CONFIG_FILE) as f:
-        return json.load(f)
+    # SnapDeploy / env-var based config
+    env_user = os.environ.get("GARMIN_USER")
+    env_pass = os.environ.get("GARMIN_PASSWORD")
+    if env_user and env_pass:
+        return {"user": env_user, "password": env_pass}
+
+    if CONFIG_FILE.is_file():
+        with open(CONFIG_FILE) as f:
+            return json.load(f)
+
+    return {}
 
 
 def _get_garmin() -> Garmin:
@@ -114,13 +123,37 @@ def _get_garmin() -> Garmin:
         return _garmin
 
     config = _load_config()
-    email = config.get("user") or config.get("credentials", {}).get("user")
-    password = config.get("password") or config.get("credentials", {}).get("password")
+    email = config.get("user")
+    password = config.get("password")
+    token_file = str(CONFIG_DIR / "garmin_token.json")
+
+    # Try env-var token first (for SnapDeploy etc.)
+    env_token = os.environ.get("GARMIN_SESSION_TOKEN")
+    if env_token and not os.path.isfile(token_file):
+        try:
+            import base64
+            with open(token_file, "w") as f:
+                f.write(base64.b64decode(env_token).decode())
+            logger.info("Wrote session token from GARMIN_SESSION_TOKEN env var")
+        except Exception as e:
+            logger.warning("Failed to decode GARMIN_SESSION_TOKEN: %s", e)
+
+    # Try cached token file
+    if os.path.isfile(token_file):
+        try:
+            garmin = Garmin()
+            garmin.login(token_file)
+            _garmin = garmin
+            _display_name = garmin.display_name
+            logger.info("Logged in via cached token (display_name=%s)", _display_name)
+            return garmin
+        except (GarminConnectAuthenticationError, GarminConnectConnectionError) as e:
+            logger.warning("Cached token failed: %s – falling back to credentials", e)
 
     if not email or not password:
         raise RuntimeError(
-            "Missing Garmin credentials. Place GarminConnectConfig.json in "
-            f"{CONFIG_DIR} with 'user' and 'password' fields."
+            "Missing Garmin credentials. Set GARMIN_USER and GARMIN_PASSWORD env vars, "
+            "or place GarminConnectConfig.json in " + str(CONFIG_DIR)
         )
 
     token_file = str(CONFIG_DIR / "garmin_token.json")
