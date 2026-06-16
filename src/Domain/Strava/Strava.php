@@ -46,7 +46,17 @@ class Strava
         private readonly Sleep $sleep,
         private readonly LoggerInterface $logger,
         private readonly Clock $clock,
+        private readonly ?string $garminBridgeBaseUri = null,
     ) {
+    }
+
+    private function getBaseUri(): string
+    {
+        if ($this->garminBridgeBaseUri) {
+            return $this->garminBridgeBaseUri;
+        }
+
+        return 'https://www.strava.com/';
     }
 
     /**
@@ -58,7 +68,7 @@ class Strava
         array $options = []): string
     {
         $options = array_merge([
-            'base_uri' => 'https://www.strava.com/',
+            'base_uri' => $this->getBaseUri(),
         ], $options);
         // An application's 15-minute limit is reset at natural 15-minute intervals corresponding to 0, 15, 30 and 45 minutes after the hour.
         $minutesUntilNextFifteenMinuteInterval = (15 - ($this->clock->getCurrentDateTimeImmutable()->getMinutesWithoutLeadingZero() % 15)) + 1;
@@ -92,24 +102,28 @@ class Strava
             throw $e;
         }
 
+        $isBridge = null !== $this->garminBridgeBaseUri;
+
         $this->logger->info(new Monolog(
             $method,
             $path,
-            'x-ratelimit-limit: '.$response->getHeaderLine('x-ratelimit-limit'),
-            'x-ratelimit-usage: '.$response->getHeaderLine('x-ratelimit-usage'),
-            'x-readratelimit-limit: '.$response->getHeaderLine('x-readratelimit-limit'),
-            'x-readratelimit-usage: '.$response->getHeaderLine('x-readratelimit-usage'),
+            $isBridge ? 'bridge' : 'x-ratelimit-limit: '.$response->getHeaderLine('x-ratelimit-limit'),
+            $isBridge ? 'bridge' : 'x-ratelimit-usage: '.$response->getHeaderLine('x-ratelimit-usage'),
+            $isBridge ? 'bridge' : 'x-readratelimit-limit: '.$response->getHeaderLine('x-readratelimit-limit'),
+            $isBridge ? 'bridge' : 'x-readratelimit-usage: '.$response->getHeaderLine('x-readratelimit-usage'),
         ));
 
-        if (($stravaRateLimits = StravaRateLimits::fromResponse($response)) instanceof StravaRateLimits) {
-            self::$stravaRateLimits = $stravaRateLimits;
-            if ($stravaRateLimits->fifteenMinReadRateLimitHasBeenReached()) {
-                // The next request will hit the 15-minute rate limit. Pause and make sure the import does not crash.
-                $this->getConsoleOutput()->writeln(sprintf(
-                    '<comment>Whoa there! We are about to hit Strava’s 15-minute API rate limit. Taking a short %s-minute breather before getting back on track. Please be patient</comment>',
-                    $minutesUntilNextFifteenMinuteInterval
-                ));
-                $this->sleep->sweetDreams($secondsUntilNextFifteenMinuteInterval);
+        if (!$isBridge) {
+            if (($stravaRateLimits = StravaRateLimits::fromResponse($response)) instanceof StravaRateLimits) {
+                self::$stravaRateLimits = $stravaRateLimits;
+                if ($stravaRateLimits->fifteenMinReadRateLimitHasBeenReached()) {
+                    // The next request will hit the 15-minute rate limit. Pause and make sure the import does not crash.
+                    $this->getConsoleOutput()->writeln(sprintf(
+                        '<comment>Whoa there! We are about to hit Strava’s 15-minute API rate limit. Taking a short %s-minute breather before getting back on track. Please be patient</comment>',
+                        $minutesUntilNextFifteenMinuteInterval
+                    ));
+                    $this->sleep->sweetDreams($secondsUntilNextFifteenMinuteInterval);
+                }
             }
         }
 
@@ -123,6 +137,17 @@ class Strava
 
     public function verifyAccessToken(): void
     {
+        if ($this->garminBridgeBaseUri) {
+            // When using the Garmin bridge, verify by checking the bridge health.
+            try {
+                $this->request('health', 'GET', ['base_uri' => $this->garminBridgeBaseUri]);
+            } catch (\Exception $e) {
+                throw new InvalidStravaAccessToken(message: $e->getMessage(), code: $e->getCode(), previous: $e);
+            }
+
+            return;
+        }
+
         try {
             $accessToken = $this->getAccessToken();
         } catch (ClientException|RequestException $e) {
@@ -159,14 +184,26 @@ class Strava
             return Strava::$cachedAccessToken;
         }
 
-        $response = $this->request('oauth/token', 'POST', [
-            RequestOptions::FORM_PARAMS => [
-                'client_id' => (string) $this->stravaClientId,
-                'client_secret' => (string) $this->stravaClientSecret,
-                'grant_type' => 'refresh_token',
-                'refresh_token' => (string) $this->stravaRefreshToken,
-            ],
-        ]);
+        if ($this->garminBridgeBaseUri) {
+            // The bridge handles its own authentication; request a dummy token.
+            $response = $this->request('oauth/token', 'POST', [
+                RequestOptions::JSON => [
+                    'client_id' => (string) $this->stravaClientId,
+                    'client_secret' => (string) $this->stravaClientSecret,
+                    'grant_type' => 'refresh_token',
+                    'refresh_token' => (string) $this->stravaRefreshToken,
+                ],
+            ]);
+        } else {
+            $response = $this->request('oauth/token', 'POST', [
+                RequestOptions::FORM_PARAMS => [
+                    'client_id' => (string) $this->stravaClientId,
+                    'client_secret' => (string) $this->stravaClientSecret,
+                    'grant_type' => 'refresh_token',
+                    'refresh_token' => (string) $this->stravaRefreshToken,
+                ],
+            ]);
+        }
 
         $decodedResponse = Json::decode($response);
         if (empty($decodedResponse['access_token'])) {

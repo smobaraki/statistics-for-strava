@@ -32,8 +32,10 @@ final readonly class AppRequestHandler
         }
         try {
             $this->strava->verifyAccessToken();
-        } catch (InvalidStravaAccessToken|InsufficientStravaAccessTokenScopes) {
-            // Refresh token has not been set up properly or does not have the required scopes, initialize authorization flow.
+        } catch (InvalidStravaAccessToken) {
+            return new RedirectResponse('/strava-oauth', Response::HTTP_FOUND);
+        } catch (InsufficientStravaAccessTokenScopes) {
+            // Only relevant for real Strava OAuth; with Garmin bridge this should not occur.
             return new RedirectResponse('/strava-oauth', Response::HTTP_FOUND);
         }
 

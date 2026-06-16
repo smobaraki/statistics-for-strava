@@ -173,6 +173,10 @@ services:
         factory: [ null, 'fromString' ]
         arguments: ['%env(string:STRAVA_REFRESH_TOKEN)%']
 
+    App\Domain\Strava\Strava:
+        arguments:
+            $garminBridgeBaseUri: '%env(default::GARMIN_BRIDGE_BASE_URI)%'
+
     App\Domain\Strava\Webhook\WebhookConfig:
         factory: [ null, 'fromArray' ]
         arguments: ['@=app_config("import.webhooks", [])']

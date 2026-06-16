@@ -1,4 +1,18 @@
 services:
+    garmin-bridge:
+        build:
+            context: ./
+            dockerfile: garmin-bridge/Dockerfile
+        container_name: 'statistics-for-strava-garmin-bridge'
+        restart: unless-stopped
+        volumes:
+            - './garmin-bridge/config:/config'
+            - './garmin-bridge/polyline_cache:/config/polyline_cache'
+        environment:
+            - GARMIN_CONFIG_DIR=/config
+            - GARMIN_CACHE_TTL=600
+        networks:
+            - statistics-for-strava-network
     php-cli:
         build:
             context: ./
@@ -36,6 +50,7 @@ services:
           start_period: 60s
         environment:
           - TZ=Europe/Brussels
+          - GARMIN_BRIDGE_BASE_URI=http://garmin-bridge:5000/
         ports:
             - '8081:8080'
         networks:
@@ -59,6 +74,7 @@ services:
         start_period: 5s
       environment:
         - TZ=Europe/Brussels
+        - GARMIN_BRIDGE_BASE_URI=http://garmin-bridge:5000/
       command: ['bin/console', 'app:daemon:run']
       networks:
         - statistics-for-strava-network

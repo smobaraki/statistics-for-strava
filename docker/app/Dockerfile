@@ -53,15 +53,18 @@ COPY docker/app/config/snippets/ /etc/frankenphp/snippets/
 COPY docker/app/docker-entrypoint.sh /usr/local/bin/docker-entrypoint.sh
 RUN chmod +x /usr/local/bin/docker-entrypoint.sh
 
-# https://getcomposer.org/doc/03-cli.md#composer-allow-superuser
-ENV COMPOSER_ALLOW_SUPERUSER=1
+RUN curl -sS https://getcomposer.org/installer | php -- --install-dir=/usr/local/bin --filename=composer
 
 # Add application
 COPY . /var/www/
 RUN touch /var/www/.env
 RUN rm -Rf docker
 RUN mkdir -p /var/www/var/cache/dev
+RUN mkdir -p /var/www/var/cache/prod
 RUN mkdir -p /var/www/var/log
+RUN COMPOSER_PROCESS_TIMEOUT=600 composer install --no-dev --no-interaction --optimize-autoloader --no-scripts
+RUN php /var/www/bin/console cache:clear --env=prod || true
+RUN php /var/www/bin/console cache:warmup --env=prod || true
 
 # Install Shoutrrr.
 ARG TARGETARCH
