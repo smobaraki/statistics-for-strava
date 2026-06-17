@@ -169,6 +169,14 @@
                             </a>
                         </li>
                         <li class="border-t border-gray-200 pt-1.5">
+                            <button onclick="syncFromGarmin(this)" class="inline-flex items-center w-full p-2 hover:bg-gray-50 rounded cursor-pointer">
+                                <svg class="size-4 me-1.5" aria-hidden="true" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                                    <path stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v4m0 0l-2-2m2 2l2-2M12 20v-4m0 0l-2 2m2-2l2 2M4 12h4m0 0l-2-2m2 2l-2 2m12 0h-4m0 0l2-2m-2 2l2 2"/>
+                                </svg>
+                                <span id="sync-btn-text" class="text-sm font-medium text-heading">{{ "Sync from Garmin"|trans }}</span>
+                            </button>
+                        </li>
+                        <li class="border-t border-gray-200 pt-1.5">
                             <label for="darkModeToggle" class="dark-mode-toggle hover:bg-gray-50 rounded p-2 flex cursor-pointer items-center">
                                 <div class="inline-flex items-center">
                                     <svg class="size-4 me-1.5" aria-hidden="true" xmlns="http://www.w3.org/2000/svg" width="24" height="24" fill="none" viewBox="0 0 24 24"><path stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 21a9 9 0 0 1-.5-17.986V3c-.354.966-.5 1.911-.5 3a9 9 0 0 0 9 9c.239 0 .254.018.488 0A9.004 9.004 0 0 1 12 21Z"/></svg>
@@ -184,3 +192,24 @@
         </div>
     </div>
 </nav>
+<script>
+async function syncFromGarmin(btn) {
+    const text = document.getElementById('sync-btn-text');
+    text.textContent = 'Syncing...';
+    btn.disabled = true;
+    try {
+        const resp = await fetch('{{ relativeUrl('/api/trigger-import') }}');
+        const data = await resp.json();
+        if (data.status === 'ok') {
+            text.textContent = 'Sync complete — reloading...';
+            setTimeout(() => location.reload(), 1500);
+        } else {
+            text.textContent = 'Sync failed: ' + (data.message || 'unknown error');
+        }
+    } catch (e) {
+        text.textContent = 'Sync failed: ' + e.message;
+    }
+    btn.disabled = false;
+    setTimeout(() => { text.textContent = '{{ "Sync from Garmin"|trans }}'; }, 5000);
+}
+</script>
