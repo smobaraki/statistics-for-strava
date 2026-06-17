@@ -20,6 +20,7 @@ RUN set -eux; \
 RUN pip3 install --no-cache-dir --break-system-packages flask garminconnect gpxpy
 
 COPY docker/app/config/php.ini ${PHP_INI_DIR}/php.ini
+COPY docker/app/config/snippets/ /etc/frankenphp/snippets/
 
 # Custom Caddy config — listens on $PORT
 COPY docker/cloudrun/Caddyfile /etc/frankenphp/Caddyfile
@@ -36,6 +37,10 @@ RUN php /var/www/bin/console cache:clear --env=prod --no-interaction || true
 # Startup: run bridge in background, then FrankenPHP on $PORT
 COPY docker/cloudrun/start.sh /usr/local/bin/start.sh
 RUN chmod +x /usr/local/bin/start.sh
+
+# Garmin bridge config directory
+ENV GARMIN_CONFIG_DIR=/var/www/garmin-bridge/config
+RUN mkdir -p ${GARMIN_CONFIG_DIR}
 
 ENV PORT=8080
 EXPOSE 8080
