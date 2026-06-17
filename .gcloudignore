@@ -1,0 +1,11 @@
+# GCP Build ignore — only exclude what we truly don't need in the Docker image
+.git
+.github
+.idea
+garmin-bridge/.venv
+garmin-bridge/__pycache__
+node_modules
+tests
+docs
+*.md
+LICENSE

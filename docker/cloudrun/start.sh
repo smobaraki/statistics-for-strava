@@ -15,29 +15,33 @@ fi
 # Ensure directories exist
 mkdir -p /var/www/storage/database /var/www/storage/files /var/www/build /var/www/watch
 
-# Run migrations
-php /var/www/bin/console app:db:migrate --no-interaction || true
+echo "Running migrations..."
+php /var/www/bin/console app:db:migrate --no-interaction 2>&1 || echo "Migration warning (may be OK)"
+
+# Write .env.local from env vars
+cat > /var/www/.env.local << ENVEOF
+GARMIN_BRIDGE_BASE_URI=http://localhost:5000/
+STRAVA_CLIENT_ID=0
+STRAVA_CLIENT_SECRET=0
+STRAVA_REFRESH_TOKEN=0
+ENVEOF
 
 # Start Garmin bridge in background
 echo "Starting Garmin bridge..."
-python3 /var/www/garmin-bridge/app.py &
+python3 /var/www/garmin-bridge/app.py 2>&1 &
 BRIDGE_PID=$!
 
-# Wait for bridge
+# Wait for bridge health
 for i in $(seq 1 30); do
     if curl -sf http://localhost:5000/health > /dev/null 2>&1; then
         echo "Garmin bridge ready"
         break
     fi
+    if [ $i -eq 30 ]; then
+        echo "WARNING: Garmin bridge not ready after 30s, continuing anyway"
+    fi
     sleep 1
 done
 
-# Run a quick import in background if no data exists (first boot)
-if [ ! -f /var/www/storage/database/dreeve.db ] || [ $(php -r "echo (new SQLite3('/var/www/storage/database/dreeve.db'))->querySingle('SELECT COUNT(*) FROM activity');" 2>/dev/null || echo 0) -eq 0 ]; then
-    echo "First boot — running initial import in background..."
-    php /var/www/bin/console app:data:import &
-fi
-
-# Start FrankenPHP on Cloud Run's PORT
 echo "Starting web server on port ${PORT:-8080}..."
 exec frankenphp run --config /etc/frankenphp/Caddyfile
