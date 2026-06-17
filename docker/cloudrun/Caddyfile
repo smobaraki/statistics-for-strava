@@ -1,0 +1,61 @@
+{
+	http_port {$PORT:8080}
+	auto_https off
+
+	frankenphp {
+		num_threads 3
+		worker {
+			num 2
+			file ./public/index.php
+		}
+	}
+
+	log {
+		output stdout
+		format console
+		level {$CADDY_LOG_LEVEL:ERROR}
+	}
+}
+
+import /etc/frankenphp/snippets/paths.caddyfile
+
+:{$PORT:8080} {
+	root /var/www/public
+	encode zstd br gzip
+
+	header {
+		Cache-Control "no-cache, no-store, must-revalidate"
+		?Permissions-Policy "browsing-topics=()"
+	}
+
+	import paths
+
+	handle {
+		@phpRoute {
+			not file {path}
+		}
+		rewrite @phpRoute index.php
+		@frontController path index.php
+		php @frontController
+	}
+
+	handle_errors 403 404 {
+		root /var/www/public
+		rewrite * /{err.status_code}.html
+		file_server
+	}
+
+	handle_errors 5xx {
+		root /var/www/public
+		rewrite * /50x.html
+		file_server
+	}
+
+	handle_errors {
+		respond "{err.status_code} {err.status_text}"
+	}
+
+	file_server {
+		hide *.php *.yaml *.yml */log
+	}
+}
